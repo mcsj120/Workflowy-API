@@ -1,5 +1,5 @@
 import requests
-from workflowy_exception import WorkFlowyException
+from workflowy.workflowy_exception import WorkFlowyException
 import re, json, uuid
 
 class WorkFlowyTransport:

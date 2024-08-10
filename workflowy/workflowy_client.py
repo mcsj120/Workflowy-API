@@ -1,7 +1,7 @@
-from workflowy_account import WorkFlowyAccount
-from workflowy_transport import WorkFlowyTransport
-from workflowy_exception import WorkFlowyException
-from workflowy_project import WorkFlowyProject
+from workflowy.workflowy_account import WorkFlowyAccount
+from workflowy.workflowy_transport import WorkFlowyTransport
+from workflowy.workflowy_exception import WorkFlowyException
+from workflowy.workflowy_project import WorkFlowyProject
 import re
 
 class WorkFlowyClient:

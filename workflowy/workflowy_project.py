@@ -1,5 +1,5 @@
-from workflowy_transport import WorkFlowyTransport
-from workflowy_list import WorkFlowyList
+from workflowy.workflowy_transport import WorkFlowyTransport
+from workflowy.workflowy_list import WorkFlowyList
 
 class WorkFlowyProject:
     '''

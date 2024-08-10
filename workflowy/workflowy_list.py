@@ -1,5 +1,5 @@
-from workflowy_transport import WorkFlowyTransport
-from workflowy_exception import WorkFlowyException
+from workflowy.workflowy_transport import WorkFlowyTransport
+from workflowy.workflowy_exception import WorkFlowyException
 import re
 import random
 
@@ -226,10 +226,57 @@ class WorkFlowyList:
         Raises:
             WorkFlowyException: If the list with the given ID is not found.
         """
-        if id in self.main_list.all_lists:
+        if id in self.main_list.all_lists.items():
             return self.main_list.all_lists[id]
         else:
             raise WorkFlowyException(f"List {id} not found")
+        
+    def get_list_by_name(self, name: str):
+        """
+        Get the list with the given name.
+
+        Args:
+            name (str): The name of the list to retrieve.
+
+        Returns:
+            WorkFlowyList: The list with the given name.
+
+        Raises:
+            WorkFlowyException: If the list with the given name is not found.
+        """
+        for id, workflowy_list in self.main_list.all_lists.items():
+            if workflowy_list.get_name() == name:
+                return self.main_list.all_lists[id]
+        raise WorkFlowyException(f"List {id} not found")
+    
+    def get_list_by_name_nested(self, names: list[str]):
+        """
+        Get the list with the given name.
+
+        Args:
+            names (list[str]): A list of the names of nodes.
+
+        Returns:
+            WorkFlowyList: The list with the given name of the last item in the input list.
+
+        Raises:
+            WorkFlowyException: If the list with the given path is not found.
+        """
+        current_list = self.main_list
+        found = False
+        for index, name in enumerate(names):
+            for id, workflowy_list in current_list.all_lists.items():
+                if workflowy_list.get_name() == name:
+                    if index == len(names) - 1:
+                        return current_list.all_lists[id]
+                    else:
+                        found = True
+                        current_list = current_list.all_lists[id].main_list
+                        break
+            if not found:
+                 raise WorkFlowyException(f"List {id} not found")
+            found = False
+        raise WorkFlowyException(f"List {id} not found")
         
 
     # Setters
