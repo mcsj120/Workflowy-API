@@ -1,12 +1,14 @@
 from datetime import date
+import json
 
 from workflowy import workflowy_client as wf
 
-#TODO: add code to read from .env file
-username = ""
-password = ""
+with open('config.json', 'r') as config_file:
+    config = json.load(config_file)
+    username = config.get['username']
+    password = config.get['password']
 
-session_id = wf.WorkFlowyClient.login()
+session_id = wf.WorkFlowyClient.login(username, password)
 client = wf.WorkFlowyClient(session_id)
 
 main = client.get_main_list()
