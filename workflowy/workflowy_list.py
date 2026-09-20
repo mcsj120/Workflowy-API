@@ -2,6 +2,7 @@ from workflowy.workflowy_transport import WorkFlowyTransport
 from workflowy.workflowy_exception import WorkFlowyException
 import re
 import random
+import requests
 
 class WorkFlowyList:
     """
@@ -20,7 +21,20 @@ class WorkFlowyList:
     - transport: The transport object used for making API requests (WorkFlowyTransport object).
     """
 
-    def __init__(self, id, name, description, level, creation_time, last_modified_time, completed_time, sublists, main_list, transport):
+    def __init__(
+        self,
+        id,
+        name,
+        description,
+        level,
+        creation_time,
+        last_modified_time,
+        completed_time,
+        sublists,
+        main_list,
+        transport,
+        metadata=None
+    ):
         """
         Initializes a WorkFlowyList object.
 
@@ -35,6 +49,7 @@ class WorkFlowyList:
         - sublists: The sublists contained within the list (list of WorkFlowyList objects).
         - main_list: The main list to which the list belongs (WorkFlowyProject object).
         - transport: The transport object used for making API requests (WorkFlowyTransport object).
+        - metadata: Optional metadata dict containing extra node properties.
         """
         self.id = id if isinstance(id, str) else ''
         self.name = name if isinstance(name, str) else ''
@@ -44,6 +59,7 @@ class WorkFlowyList:
         self.last_modified_time = last_modified_time if isinstance(last_modified_time, int) else 0
         self.completed_time = completed_time if isinstance(completed_time, int) else 0
         self.sublists = []
+        self.metadata = metadata if isinstance(metadata, dict) else {}
 
         # Check sublists
         if isinstance(sublists, list):
@@ -211,6 +227,110 @@ class WorkFlowyList:
             list: A list of WorkFlowyList objects representing the sublists.
         """
         return self.sublists
+
+
+    def get_metadata(self):
+        """
+        Get the metadata of the list/node.
+
+        Returns:
+            dict: The metadata dictionary of the list/node.
+        """
+        return self.metadata
+
+
+    def is_file(self) -> bool:
+        """
+        Check if the list/node represents a file attachment.
+
+        Returns:
+            bool: True if the list/node is a file attachment, False otherwise.
+        """
+        return "s3File" in self.metadata
+
+
+    def get_file_info(self) -> dict:
+        """
+        Get the S3 file information if the list/node represents a file.
+
+        Returns:
+            dict: A dictionary with keys like 'isFile', 'fileName', 'fileType', 'objectFolder', etc.
+                  Returns an empty dictionary if it's not a file.
+        """
+        return self.metadata.get("s3File", {})
+
+
+
+
+    def get_signed_file_url(self, resolution: str = "800x800") -> str:
+        """
+        Request and retrieve a temporary signed download URL for the file/image.
+
+        Args:
+            resolution (str, optional): The resolution for image files. Defaults to "800x800".
+
+        Returns:
+            str: The signed download URL, or None if it is not a file or has no objectFolder.
+        """
+        if not self.is_file():
+            return None
+
+        file_info = self.get_file_info()
+        object_folder = file_info.get("objectFolder")
+        if not object_folder:
+            return None
+
+        user_id = getattr(self.main_list, "user_id", None)
+        if not user_id:
+            try:
+                # Try to retrieve user_id from initialization data
+                init_data = self.transport.get_initialization_data()
+                user_id = init_data.get("user", {}).get("id")
+                self.main_list.user_id = user_id
+            except Exception:
+                return None
+
+        from urllib.parse import quote
+        encoded_folder = quote(object_folder)
+        signed_preview_url = f"https://workflowy.com/file-proxy/signed-preview/{user_id}/{self.id}/{resolution}/?attempt=1&folder={encoded_folder}"
+
+        try:
+            headers = {
+                "Cookie": f"sessionid={self.transport.session_id}",
+                "Referer": "https://workflowy.com/"
+            }
+            res = self.transport.session.get(signed_preview_url, headers=headers, timeout=15)
+            res.raise_for_status()
+            return res.json().get("url")
+        except Exception:
+            return None
+
+
+    def download_file(self, destination_path: str, resolution: str = "800x800") -> bool:
+        """
+        Download the file/image to the specified local destination path.
+
+        Args:
+            destination_path (str): The local file path to save the downloaded file.
+            resolution (str, optional): The resolution for image files. Defaults to "800x800".
+
+        Returns:
+            bool: True if the download was successful, False otherwise.
+        """
+        download_url = self.get_signed_file_url(resolution=resolution)
+        if not download_url:
+            return False
+
+        try:
+            res = requests.get(download_url, stream=True, timeout=20)
+            res.raise_for_status()
+            with open(destination_path, "wb") as f:
+                for chunk in res.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            return True
+        except Exception:
+            return False
     
 
     def get_list(self, id: str):
@@ -307,6 +427,23 @@ class WorkFlowyList:
             'projectid': self.id,
             'description': description
         })
+
+    def set_any(self, undo_data=None, **kwargs):
+        """
+        Set the any of the list.
+
+        Args:
+            kwargs: A dictionary of key-value pairs to set.
+        """
+        request_obj = {
+            'projectid': self.id,
+            **kwargs
+        }
+        if undo_data is not None:
+            request_obj['undo_data'] = undo_data
+        self.transport.listRequest('edit', request_obj)
+
+
         
 
     def set_complete(self, complete: bool):
@@ -398,7 +535,9 @@ class WorkFlowyList:
         self.main_list.parent_ids.pop(self.id)
 
 
-    def create_sublist(self, name: str = None, description: str = None, priority: int = 0):
+    def create_sublist(
+        self, name: str = None, description: str = None, priority: int = 0, metadata: dict = {}
+    ) -> 'WorkFlowyList':
         """
         Create a new sublist within the current list.
 
@@ -421,6 +560,8 @@ class WorkFlowyList:
             properties['name'] = name
         if description:
             properties['description'] = description
+        if metadata:
+            properties['metadataPatches'] = [metadata]
         
         if properties: # Only send the request if there are properties to set
             self.transport.listRequest('edit', {
@@ -444,6 +585,7 @@ class WorkFlowyList:
         self.main_list.all_lists[new_id] = new_list
         self.main_list.parent_ids[new_id] = self.id
         self.sublists.insert(priority, new_list)
+        return new_list
 
 
     def __generate_id(self):

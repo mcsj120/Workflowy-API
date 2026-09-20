@@ -62,6 +62,10 @@ class WorkFlowyTransport:
         """
         if not isinstance(action, str) or not isinstance(data, dict):
             raise WorkFlowyException("Invalid API request")
+        
+        undo_data = {}
+        if 'undo_data' in data:
+            undo_data = data.pop('undo_data')
 
         request_data = {
             "client_id": self.client_id,
@@ -71,7 +75,7 @@ class WorkFlowyTransport:
                 [
                     {
                         "most_recent_operation_transaction_id": self.most_recent_operation_transaction_id,
-                        "operations": [{"type": action, "data": data}],
+                        "operations": [{"type": action, "data": data, "undo_data": undo_data}],
                     }
                 ]
             ),

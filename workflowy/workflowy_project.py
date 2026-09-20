@@ -48,6 +48,8 @@ class WorkFlowyProject:
         if init_data['projectTreeData']['clientId']:
             self.transport.client_id = init_data['projectTreeData']['clientId']
 
+        self.user_id = init_data.get('user', {}).get('id')
+
         if init_data['projectTreeData']['mainProjectTreeInfo']['initialMostRecentOperationTransactionId']:
             self.transport.most_recent_operation_transaction_id = init_data['projectTreeData']['mainProjectTreeInfo']['initialMostRecentOperationTransactionId']
 
@@ -97,7 +99,8 @@ class WorkFlowyProject:
             completed_time=completed_time,
             sublists=processed_sublists,
             main_list=self,
-            transport=self.transport
+            transport=self.transport,
+            metadata=raw_list.get('metadata')
         )
 
         if parent_id:
