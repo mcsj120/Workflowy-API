@@ -1,5 +1,8 @@
+from datetime import timezone
+from datetime import datetime
 from workflowy.workflowy_transport import WorkFlowyTransport
 from workflowy.workflowy_exception import WorkFlowyException
+import json
 import re
 import random
 import requests
@@ -536,7 +539,11 @@ class WorkFlowyList:
 
 
     def create_sublist(
-        self, name: str = None, description: str = None, priority: int = 0, metadata: dict = {}
+        self,
+        name: str = None,
+        description: str = None,
+        priority: int = 0,
+        metadata: dict = {}
     ) -> 'WorkFlowyList':
         """
         Create a new sublist within the current list.
@@ -545,13 +552,14 @@ class WorkFlowyList:
             name (str, optional): The name of the new sublist. Defaults to None.
             description (str, optional): The description of the new sublist. Defaults to None.
             priority (int, optional): The priority of the new sublist. Defaults to 0.
+            metadata (dict, optional): The metadata of the new sublist. Defaults to {}
         """
         new_id = self.__generate_id()
 
         self.transport.listRequest('create', {
             'projectid': new_id,
             'parentid': self.id,
-            'priority': priority,
+            'starting_priority': priority,
         })
 
         properties = {}
@@ -587,6 +595,54 @@ class WorkFlowyList:
         self.sublists.insert(priority, new_list)
         return new_list
 
+    def bulk_create_sublist(
+        self,
+        names: list[list[str]],
+        priority: int = 0
+    ):
+        """
+            Used for table generation
+        """
+
+        
+        dt = int(datetime.now(tz=timezone.utc).timestamp())
+        
+        cb = 3441038
+
+        project_trees = []
+        index = 0
+        for name_list in names:
+            obj = {"metadata": {}, 'ch': [], 'ct': dt, 'cb': cb}
+            obj['id'] = self.__generate_id()
+            if index == 0:
+                obj['nm'] = 'Headers'
+                obj['metadata']['table'] = {'headers': True}
+            else:
+                obj['nm'] = 'Row'
+            
+            for name in name_list:
+                subobj = {'id': self.__generate_id(), 'ct': dt, 'cb': cb}#, 'name': name}
+                obj['ch'].append(subobj)
+
+            project_trees.append(obj)
+            index += 1
+            
+        self.transport.listRequest(
+            ['bulk_create', 'edit'], 
+            [{
+                'parentid': self.id,
+                'starting_priority': priority,
+                'project_trees': json.dumps(project_trees)
+            }, {
+                'projectid': self.id,
+                "metadataPatches": WorkFlowyList.get_table_metadata(),
+                "metadataInversePatches": WorkFlowyList.get_inverse_metadata(),
+                "undo_data": {
+                    "metadataPatches": WorkFlowyList.get_inverse_metadata()
+                }
+            }],
+            { self.id[0:8]: True }
+        )
 
     def __generate_id(self):
         """
@@ -623,3 +679,59 @@ class WorkFlowyList:
         self.level = level
         for sublist in self.sublists:
             sublist.__update_levels(level + 1)
+
+    @staticmethod
+    def get_code_block_metadata():
+        """Returns the metadata for a heading."""
+        return {
+            "op": "add",
+            "path": [
+                "layoutMode"
+            ],
+            "value": "code-block"
+        }
+
+    @staticmethod
+    def get_divider_metadata():
+        """Returns the metadata for a heading."""
+        return {
+            "op": "add",
+            "path": [
+                "layoutMode"
+            ],
+            "value": "divider"
+        }
+
+    @staticmethod
+    def get_table_metadata():
+        """Returns the metadata for a heading."""
+        return {
+            "op": "add",
+            "path": [
+                "layoutMode"
+            ],
+            "value": "table"
+        }
+
+    @staticmethod
+    def get_inverse_metadata():
+        """Returns the metadata for a heading."""
+        return {
+            "op": "remove",
+            "path": [
+                "layoutMode"
+            ]
+        }
+
+
+    @staticmethod
+    def get_heading_metadata(level: int):
+        """Returns the metadata for a heading."""
+        level = min(level, 3)
+        return {
+            "op": "add",
+            "path": [
+                "layoutMode"
+            ],
+            "value": f"h{level}"
+        }
