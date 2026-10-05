@@ -49,7 +49,7 @@ class WorkFlowyTransport:
         self.client_id = None
         self.most_recent_operation_transaction_id = None
 
-    def listRequest(self, action: str, data: dict = {}):
+    def listRequest(self, action: str | list[str], data: dict | list[dict] = {}, project_expansions_delta: dict = {}):
         """
         Handles push_and_poll requests.
 
@@ -60,12 +60,23 @@ class WorkFlowyTransport:
         Raises:
             WorkFlowyException: If an invalid API request is provided.
         """
-        if not isinstance(action, str) or not isinstance(data, dict):
+        if isinstance(action, list) and isinstance(data, list):
+            if len(action) != len(data):
+                raise WorkFlowyException("Action and data must have the same length")
+            for i in range(len(action)):
+                if not isinstance(action[i], str) or not isinstance(data[i], dict):
+                    raise WorkFlowyException("Invalid API request")
+        elif not isinstance(action, str) or not isinstance(data, dict):
             raise WorkFlowyException("Invalid API request")
+
+        if isinstance(action, str):
+            action = [action]
+        if isinstance(data, dict):
+            data = [data]
         
-        undo_data = {}
-        if 'undo_data' in data:
-            undo_data = data.pop('undo_data')
+        undo_list = []
+        for i in range(len(data)):
+            undo_list.append(data[i].pop("undo_data") if data[i].get("undo_data") else None)
 
         request_data = {
             "client_id": self.client_id,
@@ -75,8 +86,11 @@ class WorkFlowyTransport:
                 [
                     {
                         "most_recent_operation_transaction_id": self.most_recent_operation_transaction_id,
-                        "operations": [{"type": action, "data": data, "undo_data": undo_data}],
-                    }
+                        "operations": [
+                            {"type": action[i], "data": data[i]} |  ({"undo_data": undo_list[i]} if undo_list[i] is not None else {})
+                            for i in range(len(action))
+                        ],
+                    } | ({'project_expansions_delta': project_expansions_delta} if project_expansions_delta else {})
                 ]
             ),
         }
